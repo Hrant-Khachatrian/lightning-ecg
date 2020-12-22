@@ -8,6 +8,8 @@ from torch.utils.data import Dataset, DataLoader, random_split
 
 import pytorch_lightning as pl
 
+from torchvision.models import resnet50
+
 
 class MITBIHDataset(Dataset):
     def __init__(self, npy_file, part, qdev=False):
@@ -59,9 +61,9 @@ class MainECG(pl.LightningModule):
         super().__init__()
 
         # source images are (1, 1, 280) (channels, width, height)
-        self.layer_1 = nn.Linear(280, 128)
-        self.layer_2 = nn.Linear(128, 256)
-        self.layer_3 = nn.Linear(256, 5)
+        self.feature_extractor = resnet50()
+
+        self.linear = nn.Linear(1000, 5)
 
         self.train_acc = pl.metrics.Accuracy()
         self.valid_acc = pl.metrics.Accuracy()
@@ -74,12 +76,15 @@ class MainECG(pl.LightningModule):
         batch_size, beat_length = x.size()
 
         # (b, 1, 28, 28) -> (b, 1*28*28)
+        pad_size = (224 - beat_length) // 2
+        if pad_size < 0:
+            pad_size = 0
+        x = F.pad(x, pad=[pad_size, pad_size, 0, 0])
+        x = x.view(batch_size, 1, 1, max(224, beat_length))
+        x = x.repeat(1, 3, 224, 1)
+        x = self.feature_extractor(x)
         x = x.view(batch_size, -1)
-        x = self.layer_1(x)
-        x = F.relu(x)
-        x = self.layer_2(x)
-        x = F.relu(x)
-        x = self.layer_3(x)
+        x = self.linear(x)
 
         x = F.log_softmax(x, dim=1)
         return x
@@ -128,6 +133,6 @@ from pytorch_lightning.loggers import TensorBoardLogger
 if __name__ == '__main__':
     print("hello")
     model = MainECG()
-    logger = TensorBoardLogger('/home/hrant/tb_logs/', name='ecg-mlp-cw')
+    logger = TensorBoardLogger('/home/hrant/tb_logs/', name='ecg-r50-cw')
     trainer = pl.Trainer(logger=logger)
     trainer.fit(model)
