@@ -55,20 +55,28 @@ class MITBIHDataset(Dataset):
 
 
 class MainECG(pl.LightningModule):
-    def __init__(self):
+    def __init__(self, data_source='aligned180'):
         super().__init__()
 
-        # source images are (1, 1, 280) (channels, width, height)
-        self.layer_1 = nn.Linear(280, 128)
+        if data_source == 'aligned180':
+            self.data_path = '/mnt/2tb/tigrann/domainbed/mit_bih_data.npy'  # aligned beats
+            beat_length = 180
+            class_weights = [1, 32, 13, 112]
+        else:
+            self.data_path = '/mnt/2tb/tigrann/domainbed/mit-bih.npy'  # non-aligned beats
+            beat_length = 280
+            class_weights = [1, 32, 13, 112, 6428]
+
+        self.layer_1 = nn.Linear(beat_length, 128)
         self.layer_2 = nn.Linear(128, 256)
-        self.layer_3 = nn.Linear(256, 5)
+        self.layer_3 = nn.Linear(256, len(class_weights))
 
         self.train_acc = pl.metrics.Accuracy()
         self.valid_acc = pl.metrics.Accuracy()
         self.train_f1 = pl.metrics.classification.F1(5, average=None)
         self.valid_f1 = pl.metrics.classification.F1(5, average=None)
 
-        self.class_weights = torch.tensor([1, 32, 13, 112, 6428], dtype=torch.float)
+        self.class_weights = torch.tensor(class_weights, dtype=torch.float)
 
     def forward(self, x):
         batch_size, beat_length = x.size()
@@ -98,7 +106,7 @@ class MainECG(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         logits = self(batch['x'])
-        loss = F.nll_loss(logits, batch['y'])
+        # loss = F.nll_loss(logits, batch['y'])
         self.valid_acc(logits, batch['y'])
         Nf1, Sf1, Vf1, Ff1, Qf1 = self.valid_f1(logits, batch['y'])
         self.log('valid_acc', self.valid_acc, on_step=False, on_epoch=True)
@@ -109,17 +117,17 @@ class MainECG(pl.LightningModule):
         return Adam(self.parameters(), lr=1e-3)
 
     def train_dataloader(self):
-        train_dataset = MITBIHDataset('/mnt/2tb/tigrann/domainbed/mit-bih.npy', 'DS1', qdev=False)
+        train_dataset = MITBIHDataset(self.data_path, 'DS1', qdev=False)
         train_loader = DataLoader(train_dataset, batch_size=64)
         return train_loader
 
     def val_dataloader(self):
-        train_dataset = MITBIHDataset('/mnt/2tb/tigrann/domainbed/mit-bih.npy', 'DS1', qdev=True)
+        train_dataset = MITBIHDataset(self.data_path, 'DS1', qdev=True)
         train_loader = DataLoader(train_dataset, batch_size=64)
         return train_loader
 
     def test_dataloader(self):
-        test_dataset = MITBIHDataset('/mnt/2tb/tigrann/domainbed/mit-bih.npy', 'DS2', qdev=False)
+        test_dataset = MITBIHDataset(self.data_path, 'DS2', qdev=False)
         test_loader = DataLoader(test_dataset, batch_size=64)
         return test_loader
 
@@ -128,6 +136,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 if __name__ == '__main__':
     print("hello")
     model = MainECG()
-    logger = TensorBoardLogger('/home/hrant/tb_logs/', name='ecg-mlp-cw')
+    logger = TensorBoardLogger('/home/hrant/tb_logs/', name='ecg180-mlp-cw')
     trainer = pl.Trainer(logger=logger)
+    # trainer = pl.Trainer()
     trainer.fit(model)
