@@ -127,7 +127,7 @@ class MainECG(pl.LightningModule):
         return train_loader
 
     def val_dataloader(self):
-        train_dataset = MITBIHDataset(self.data_path, 'DS1', qdev=True)
+        train_dataset = MITBIHDataset(self.data_path, 'DS2', qdev=False)
         train_loader = DataLoader(train_dataset, batch_size=64)
         return train_loader
 
