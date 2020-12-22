@@ -71,7 +71,7 @@ class MainECG(pl.LightningModule):
 
         self.feature_extractor = resnet50()
 
-        self.linear = nn.Linear(1000, 5)
+        self.linear = nn.Linear(1000, len(class_weights))
 
         self.train_acc = pl.metrics.Accuracy()
         self.valid_acc = pl.metrics.Accuracy()
