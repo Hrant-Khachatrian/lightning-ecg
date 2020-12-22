@@ -57,8 +57,10 @@ class MITBIHDataset(Dataset):
 
 
 class MainECG(pl.LightningModule):
-    def __init__(self, data_source='aligned180'):
+    def __init__(self, batch_size=16, data_source='aligned180'):
         super().__init__()
+
+        self.batch_size = batch_size
 
         if data_source == 'aligned180':
             self.data_path = '/mnt/2tb/tigrann/domainbed/mit_bih_data.npy'  # aligned beats
@@ -123,17 +125,17 @@ class MainECG(pl.LightningModule):
 
     def train_dataloader(self):
         train_dataset = MITBIHDataset(self.data_path, 'DS1', qdev=False)
-        train_loader = DataLoader(train_dataset, batch_size=64)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size)
         return train_loader
 
     def val_dataloader(self):
         train_dataset = MITBIHDataset(self.data_path, 'DS2', qdev=False)
-        train_loader = DataLoader(train_dataset, batch_size=64)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size)
         return train_loader
 
     def test_dataloader(self):
         test_dataset = MITBIHDataset(self.data_path, 'DS2', qdev=False)
-        test_loader = DataLoader(test_dataset, batch_size=64)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
         return test_loader
 
 from pytorch_lightning.loggers import TensorBoardLogger
