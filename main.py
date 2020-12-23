@@ -108,19 +108,19 @@ class MainECG(pl.LightningModule):
         weights = [class_weights[train_dataset.labels[i]] for i in range(num_samples)]
         sampler = WeightedRandomSampler(weights, num_samples)
 
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, sampler=sampler)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, sampler=sampler, num_workers=4)
         return train_loader
 
     def val_dataloader(self):
         DS1_qdev = MITBIHDataset(self.data_path, 'DS1', qdev=True)
         DS2 = MITBIHDataset(self.data_path, 'DS2', qdev=None)
-        loader1 = DataLoader(DS1_qdev, batch_size=self.batch_size)
-        loader2 = DataLoader(DS2, batch_size=self.batch_size)
+        loader1 = DataLoader(DS1_qdev, batch_size=self.batch_size, num_workers=4)
+        loader2 = DataLoader(DS2, batch_size=self.batch_size, num_workers=4)
         return [loader1, loader2]
 
     def test_dataloader(self):
         test_dataset = MITBIHDataset(self.data_path, 'DS2', qdev=None)
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=4)
         return test_loader
 
 from pytorch_lightning.loggers import TensorBoardLogger
