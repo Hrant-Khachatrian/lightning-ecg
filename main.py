@@ -5,7 +5,7 @@ import argparse
 
 from torch import nn
 from torch.nn import functional as F
-from torch.optim import SGD, lr_scheduler
+from torch.optim import SGD, Adam, lr_scheduler
 from torch.utils.data import DataLoader
 
 import pytorch_lightning as pl
@@ -84,7 +84,7 @@ class MainECG(pl.LightningModule):
         self.log('train_S_f1', Sf1, on_step=True, on_epoch=False)
         self.log('train_V_f1', Vf1, on_step=True, on_epoch=False)
         self.log('loss', loss, on_step=True, on_epoch=False)
-        self.log('lr', self.optimizers().param_groups[0]['lr'], on_step=True, on_epoch=False)
+        self.log('lr', self.optimizers().param_groups[0]['lr'], on_step=False, on_epoch=True)
 
         return loss
 
@@ -101,8 +101,10 @@ class MainECG(pl.LightningModule):
         self.log(f'{prefix}_V_f1', Vf1, on_step=False, on_epoch=True)
 
     def configure_optimizers(self):
-        optimizer = SGD(self.parameters(), lr=1e-3, momentum=0.9, weight_decay=0.001)
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[10, 30], gamma=0.1)
+        # optimizer = SGD(self.parameters(), lr=5e-3, momentum=0.9, weight_decay=0.001)
+        # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[10, 30], gamma=0.1)
+        optimizer = Adam(self.parameters(), lr=1e-3)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[20], gamma=0.1)
         return [optimizer], [scheduler]
 
     def train_dataloader(self):
@@ -140,7 +142,7 @@ if __name__ == '__main__':
     parser.add_argument('--filters', '-f', type=int, default=64)
     args = parser.parse_args()
 
-    model = MainECG(batch_size=args.batch_size, conv_filters=args.filters, data_workers=0).cuda()
+    model = MainECG(batch_size=args.batch_size, conv_filters=args.filters, data_workers=4).cuda()
     logger = TensorBoardLogger(args.tb_path, name=args.tb_name)
 
     log_speed = max(1, 5000 // args.batch_size)
