@@ -135,6 +135,8 @@ if __name__ == '__main__':
 
     model = MainECG(batch_size=args.batch_size, conv_filters=args.filters).cuda()
     logger = TensorBoardLogger(args.tb_path, name=args.tb_name)
-    trainer = pl.Trainer(logger=logger)
+
+    log_speed = max(1, 5000 // args.batch_size)
+    trainer = pl.Trainer(logger=logger, log_every_n_steps=log_speed)
     # trainer = pl.Trainer()
     trainer.fit(model)
