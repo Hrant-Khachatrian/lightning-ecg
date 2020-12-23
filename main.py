@@ -5,13 +5,12 @@ import argparse
 
 from torch import nn
 from torch.nn import functional as F
-from torch.optim import Adam
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.optim import SGD, lr_scheduler
+from torch.utils.data import DataLoader
 
 import pytorch_lightning as pl
 from torch.utils.data.sampler import WeightedRandomSampler
 
-from torchvision.models import squeezenet1_1
 from torchvision.models.resnet import BasicBlock, conv1x1
 
 from datasets import MITBIHDataset
@@ -100,7 +99,9 @@ class MainECG(pl.LightningModule):
         self.log(f'{prefix}_V_f1', Vf1, on_step=False, on_epoch=True)
 
     def configure_optimizers(self):
-        return Adam(self.parameters(), lr=1e-3)
+        optimizer = SGD(self.parameters(), lr=1e-3, momentum=0.9, weight_decay=0.001)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[10, 30], gamma=0.1)
+        return [optimizer], [scheduler]
 
     def train_dataloader(self):
         train_dataset = MITBIHDataset(self.data_path, 'DS1', qdev=False)
