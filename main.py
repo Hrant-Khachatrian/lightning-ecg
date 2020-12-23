@@ -22,11 +22,11 @@ class MainECG(pl.LightningModule):
         self.batch_size = batch_size
 
         if data_source == 'aligned180':
-            self.data_path = '/mnt/2tb/tigrann/domainbed/mit_bih_data.npy'  # aligned beats
+            self.data_path = '/nfs/c9_2tb/tigrann/domainbed/mit_bih_data.npy'  # aligned beats
             beat_length = 180
             class_weights = [1, 32, 13, 112]
         else:
-            self.data_path = '/mnt/2tb/tigrann/domainbed/mit-bih.npy'  # non-aligned beats
+            self.data_path = '/nfs/c9_2tb/tigrann/domainbed/mit-bih.npy'  # non-aligned beats
             beat_length = 280
             class_weights = [1, 32, 13, 112, 6428]
 
@@ -123,7 +123,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 if __name__ == '__main__':
     model = MainECG(batch_size=64).cuda()
-    logger = TensorBoardLogger('/home/hrant/tb_logs/', name='ecg180-custom-wrs')
+    logger = TensorBoardLogger('/nfs/c9_home/hrant/tb_logs/', name='ecg180-custom-wrs')
     trainer = pl.Trainer(logger=logger)
     # trainer = pl.Trainer()
     trainer.fit(model)
