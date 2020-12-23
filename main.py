@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 
+import argparse
+
 from torch import nn
 from torch.nn import functional as F
 from torch.optim import Adam
@@ -16,7 +18,7 @@ from datasets import MITBIHDataset
 
 
 class MainECG(pl.LightningModule):
-    def __init__(self, batch_size=16, data_source='aligned180'):
+    def __init__(self, batch_size=16, conv_filters=64, data_source='aligned180'):
         super().__init__()
 
         self.batch_size = batch_size
@@ -32,11 +34,13 @@ class MainECG(pl.LightningModule):
 
         self.num_classes = len(class_weights)
 
-        self.block1 = BasicBlock(1, 64)
-        self.block2 = BasicBlock(64, 64, stride=2, downsample=self._create_downsampler(64, 64, 2))
-        self.block3 = BasicBlock(64, 64, stride=2, downsample=self._create_downsampler(64, 64, 2))
-        self.block4 = BasicBlock(64, 64, stride=2, downsample=self._create_downsampler(64, 64, 2))
-        self.block5 = BasicBlock(64, 64, stride=2, downsample=self._create_downsampler(64, 64, 2))
+        cf = conv_filters
+
+        self.block1 = BasicBlock(1, cf)
+        self.block2 = BasicBlock(cf, cf, stride=2, downsample=self._create_downsampler(cf, cf, 2))
+        self.block3 = BasicBlock(cf, cf, stride=2, downsample=self._create_downsampler(cf, cf, 2))
+        self.block4 = BasicBlock(cf, cf, stride=2, downsample=self._create_downsampler(cf, cf, 2))
+        self.block5 = BasicBlock(cf, cf, stride=2, downsample=self._create_downsampler(cf, cf, 2))
 
         self.linear = nn.Linear(768, self.num_classes)
 
@@ -57,7 +61,7 @@ class MainECG(pl.LightningModule):
         x = x.view(batch_size, 1, 1, beat_length)
         x = x.repeat(1, 1, 11, 1)   # (b, 1, 11, 180)
 
-        x = self.block1(x)  # (b, 64, 11, 180)
+        x = self.block1(x)  # (b, 64, 11, 180)  64=conv_filters
         x = self.block2(x)  # (b, 64, 6, 90)
         x = self.block3(x)  # (b, 64, 3, 45)
         x = self.block4(x)  # (b, 64, 2, 23)
@@ -122,8 +126,15 @@ class MainECG(pl.LightningModule):
 from pytorch_lightning.loggers import TensorBoardLogger
 
 if __name__ == '__main__':
-    model = MainECG(batch_size=64).cuda()
-    logger = TensorBoardLogger('/nfs/c9_home/hrant/tb_logs/', name='ecg180-custom-wrs')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--tb_path', '-tb', default='/nfs/c9_home/hrant/tb_logs/')
+    parser.add_argument('--tb_name', '-n', default='ecg180-custom-wrs')
+    parser.add_argument('--batch_size', '-bs', type=int, default=64)
+    parser.add_argument('--filters', '-f', type=int, default=64)
+    args = parser.parse_args()
+
+    model = MainECG(batch_size=args.batch_size, conv_filters=args.filters).cuda()
+    logger = TensorBoardLogger(args.tb_path, name=args.tb_name)
     trainer = pl.Trainer(logger=logger)
     # trainer = pl.Trainer()
     trainer.fit(model)
