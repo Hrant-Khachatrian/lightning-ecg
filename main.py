@@ -7,53 +7,12 @@ from torch.optim import Adam
 from torch.utils.data import Dataset, DataLoader, random_split
 
 import pytorch_lightning as pl
+from torch.utils.data.sampler import WeightedRandomSampler
 
 from torchvision.models import squeezenet1_1
+from torchvision.models.resnet import BasicBlock, conv1x1
 
-
-class MITBIHDataset(Dataset):
-    def __init__(self, npy_file, part, qdev=False):
-        """
-        Args:
-            npy_file (string): Path to the csv file with annotations.
-            part (string): DS1 or DS2
-            qdev (boolean): Use the first 20% if True, the other 80% otherwise
-        """
-        self.raw_data = np.load(npy_file, allow_pickle=True).tolist()
-        if part not in ['DS1', 'DS2']:
-            raise Exception("Incorrect part {}".format(part))
-
-        def inside_qdev(idx, length):
-            if qdev:
-                return idx < 0.2 * length
-            else:
-                return idx > 0.2 * length
-
-        self.data = [
-            {
-                "patient": patient,
-                "x": x,
-                "y": y
-            }
-            for patient in self.raw_data.keys()
-            for i, (x, y) in enumerate(zip(self.raw_data[patient]['x'], self.raw_data[patient]['y']))
-            if patient.startswith(part) and inside_qdev(i, len(self.raw_data[patient]['y']))
-        ]
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-
-        sample = self.data[idx]
-
-        sample['x'] = torch.tensor(sample['x'], dtype=torch.float).cuda()
-        sample['y'] = torch.tensor(sample['y'], dtype=torch.long).cuda()
-
-        return sample
-
+from datasets import MITBIHDataset
 
 
 class MainECG(pl.LightningModule):
@@ -71,29 +30,40 @@ class MainECG(pl.LightningModule):
             beat_length = 280
             class_weights = [1, 32, 13, 112, 6428]
 
-        self.feature_extractor = squeezenet1_1()
+        self.num_classes = len(class_weights)
 
-        self.linear = nn.Linear(1000, len(class_weights))
+        self.block1 = BasicBlock(1, 64)
+        self.block2 = BasicBlock(64, 64, stride=2, downsample=self._create_downsampler(64, 64, 2))
+        self.block3 = BasicBlock(64, 64, stride=2, downsample=self._create_downsampler(64, 64, 2))
+        self.block4 = BasicBlock(64, 64, stride=2, downsample=self._create_downsampler(64, 64, 2))
+        self.block5 = BasicBlock(64, 64, stride=2, downsample=self._create_downsampler(64, 64, 2))
+
+        self.linear = nn.Linear(768, self.num_classes)
 
         self.train_acc = pl.metrics.Accuracy()
         self.valid_acc = pl.metrics.Accuracy()
         self.train_f1 = pl.metrics.classification.F1(5, average=None)
         self.valid_f1 = pl.metrics.classification.F1(5, average=None)
 
-        self.class_weights = torch.tensor(class_weights, dtype=torch.float).cuda()
+    def _create_downsampler(self, inplanes, planes, stride):
+        return nn.Sequential(
+            conv1x1(inplanes, planes, stride),
+            nn.BatchNorm2d(planes),
+        )
 
     def forward(self, x):
         batch_size, beat_length = x.size()
 
-        # (b, 1, 28, 28) -> (b, 1*28*28)
-        pad_size = (224 - beat_length) // 2
-        if pad_size < 0:
-            pad_size = 0
-        x = F.pad(x, pad=[pad_size, pad_size, 0, 0])
-        x = x.view(batch_size, 1, 1, max(224, beat_length))
-        x = x.repeat(1, 3, 224, 1)
-        x = self.feature_extractor(x)
-        x = x.view(batch_size, -1)
+        x = x.view(batch_size, 1, 1, beat_length)
+        x = x.repeat(1, 1, 11, 1)   # (b, 1, 11, 180)
+
+        x = self.block1(x)  # (b, 64, 11, 180)
+        x = self.block2(x)  # (b, 64, 6, 90)
+        x = self.block3(x)  # (b, 64, 3, 45)
+        x = self.block4(x)  # (b, 64, 2, 23)
+        x = self.block5(x)  # (b, 64, 1, 12)
+
+        x = x.view(batch_size, -1)  # (b, 768)
         x = self.linear(x)
 
         x = F.log_softmax(x, dim=1)
@@ -101,7 +71,7 @@ class MainECG(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         logits = self(batch['x'])
-        loss = F.nll_loss(logits, batch['y'], weight=self.class_weights)
+        loss = F.nll_loss(logits, batch['y'])
         self.train_acc(logits, batch['y'])
         Nf1, Sf1, Vf1, Ff1, Qf1 = self.train_f1(logits, batch['y'])
         self.log('train_acc', self.train_acc, on_step=True, on_epoch=False)
@@ -125,7 +95,15 @@ class MainECG(pl.LightningModule):
 
     def train_dataloader(self):
         train_dataset = MITBIHDataset(self.data_path, 'DS1', qdev=False)
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size)
+
+        num_samples = len(train_dataset)
+        class_counts = [(train_dataset.labels == i).sum() for i in range(self.num_classes)]
+
+        class_weights = [num_samples / class_counts[i] for i in range(self.num_classes)]
+        weights = [class_weights[train_dataset.labels[i]] for i in range(num_samples)]
+        sampler = WeightedRandomSampler(weights, num_samples)
+
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, sampler=sampler)
         return train_loader
 
     def val_dataloader(self):
@@ -142,7 +120,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 if __name__ == '__main__':
     model = MainECG(batch_size=32).cuda()
-    logger = TensorBoardLogger('/home/hrant/tb_logs/', name='ecg180-r50-cw')
+    logger = TensorBoardLogger('/home/hrant/tb_logs/', name='ecg180-custom-wrs')
     trainer = pl.Trainer(logger=logger)
     # trainer = pl.Trainer()
     trainer.fit(model)
