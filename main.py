@@ -17,10 +17,11 @@ from datasets import MITBIHDataset
 
 
 class MainECG(pl.LightningModule):
-    def __init__(self, batch_size=16, conv_filters=64, data_source='aligned180'):
+    def __init__(self, batch_size=16, conv_filters=64, data_source='aligned180', data_workers=0):
         super().__init__()
 
         self.batch_size = batch_size
+        self.data_workers = data_workers
 
         if data_source == 'aligned180':
             self.data_path = '/nfs/c9_2tb/tigrann/domainbed/mit_bih_data.npy'  # aligned beats
@@ -83,6 +84,7 @@ class MainECG(pl.LightningModule):
         self.log('train_S_f1', Sf1, on_step=True, on_epoch=False)
         self.log('train_V_f1', Vf1, on_step=True, on_epoch=False)
         self.log('loss', loss, on_step=True, on_epoch=False)
+        self.log('lr', self.optimizers().param_groups[0]['lr'], on_step=True, on_epoch=False)
 
         return loss
 
@@ -113,19 +115,19 @@ class MainECG(pl.LightningModule):
         weights = [class_weights[train_dataset.labels[i]] for i in range(num_samples)]
         sampler = WeightedRandomSampler(weights, num_samples)
 
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, sampler=sampler, num_workers=4)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, sampler=sampler, num_workers=self.data_workers)
         return train_loader
 
     def val_dataloader(self):
         DS1_qdev = MITBIHDataset(self.data_path, 'DS1', qdev=True)
         DS2 = MITBIHDataset(self.data_path, 'DS2', qdev=None)
-        loader1 = DataLoader(DS1_qdev, batch_size=self.batch_size, num_workers=4)
-        loader2 = DataLoader(DS2, batch_size=self.batch_size, num_workers=4)
+        loader1 = DataLoader(DS1_qdev, batch_size=self.batch_size, num_workers=self.data_workers)
+        loader2 = DataLoader(DS2, batch_size=self.batch_size, num_workers=self.data_workers)
         return [loader1, loader2]
 
     def test_dataloader(self):
         test_dataset = MITBIHDataset(self.data_path, 'DS2', qdev=None)
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=4)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=self.data_workers)
         return test_loader
 
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -138,7 +140,7 @@ if __name__ == '__main__':
     parser.add_argument('--filters', '-f', type=int, default=64)
     args = parser.parse_args()
 
-    model = MainECG(batch_size=args.batch_size, conv_filters=args.filters).cuda()
+    model = MainECG(batch_size=args.batch_size, conv_filters=args.filters, data_workers=0).cuda()
     logger = TensorBoardLogger(args.tb_path, name=args.tb_name)
 
     log_speed = max(1, 5000 // args.batch_size)
