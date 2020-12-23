@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, DataLoader, random_split
 
 import pytorch_lightning as pl
 
-from torchvision.models import resnet50
+from torchvision.models import squeezenet1_1
 
 
 class MITBIHDataset(Dataset):
@@ -49,8 +49,8 @@ class MITBIHDataset(Dataset):
 
         sample = self.data[idx]
 
-        sample['x'] = torch.tensor(sample['x'], dtype=torch.float)
-        sample['y'] = torch.tensor(sample['y'], dtype=torch.long)
+        sample['x'] = torch.tensor(sample['x'], dtype=torch.float).cuda()
+        sample['y'] = torch.tensor(sample['y'], dtype=torch.long).cuda()
 
         return sample
 
@@ -71,7 +71,7 @@ class MainECG(pl.LightningModule):
             beat_length = 280
             class_weights = [1, 32, 13, 112, 6428]
 
-        self.feature_extractor = resnet50()
+        self.feature_extractor = squeezenet1_1()
 
         self.linear = nn.Linear(1000, len(class_weights))
 
@@ -80,7 +80,7 @@ class MainECG(pl.LightningModule):
         self.train_f1 = pl.metrics.classification.F1(5, average=None)
         self.valid_f1 = pl.metrics.classification.F1(5, average=None)
 
-        self.class_weights = torch.tensor(class_weights, dtype=torch.float)
+        self.class_weights = torch.tensor(class_weights, dtype=torch.float).cuda()
 
     def forward(self, x):
         batch_size, beat_length = x.size()
@@ -141,8 +141,7 @@ class MainECG(pl.LightningModule):
 from pytorch_lightning.loggers import TensorBoardLogger
 
 if __name__ == '__main__':
-    print("hello")
-    model = MainECG()
+    model = MainECG(batch_size=32).cuda()
     logger = TensorBoardLogger('/home/hrant/tb_logs/', name='ecg180-r50-cw')
     trainer = pl.Trainer(logger=logger)
     # trainer = pl.Trainer()
