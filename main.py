@@ -44,7 +44,12 @@ class MainECG(pl.LightningModule):
         self.block4 = BasicBlock(cf, cf, stride=2, downsample=self._create_downsampler(cf, cf, 2))
         self.block5 = BasicBlock(cf, cf, stride=2, downsample=self._create_downsampler(cf, cf, 2))
 
-        self.linear = nn.Linear(768, self.num_classes)
+        last_layer_neurons = {
+            64: 768,
+            32: 384,
+            16: 192
+        }
+        self.linear = nn.Linear(last_layer_neurons[cf], self.num_classes)
 
         self.train_acc = pl.metrics.Accuracy()
         self.valid_acc = pl.metrics.Accuracy()
@@ -142,7 +147,7 @@ if __name__ == '__main__':
     parser.add_argument('--tb_name', '-n', default='ecg180-custom-wrs')
     parser.add_argument('--batch_size', '-bs', type=int, default=64)
     parser.add_argument('--learning_rate', '-lr', type=float, default=0.001)
-    parser.add_argument('--filters', '-f', type=int, default=64)
+    parser.add_argument('--filters', '-f', type=int, default=16)
     args = parser.parse_args()
 
     model = MainECG(batch_size=args.batch_size,
