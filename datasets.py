@@ -45,7 +45,7 @@ class MITBIHDataset(Dataset):
 
         sample = self.data[idx]
 
-        sample['x'] = torch.tensor(sample['x'], dtype=torch.float).cuda()
-        sample['y'] = torch.tensor(sample['y'], dtype=torch.long).cuda()
+        # sample['x'] = torch.tensor(sample['x'], dtype=torch.float).cuda()
+        # sample['y'] = torch.tensor(sample['y'], dtype=torch.long).cuda()
 
         return sample

@@ -74,10 +74,12 @@ class MainECG(pl.LightningModule):
         return x
 
     def training_step(self, batch, batch_idx):
-        logits = self(batch['x'])
-        loss = F.nll_loss(logits, batch['y'])
-        self.train_acc(logits, batch['y'])
-        Nf1, Sf1, Vf1, Ff1, Qf1 = self.train_f1(logits, batch['y'])
+        x = batch['x'].float().cuda()
+        y = batch['y'].long().cuda()
+        logits = self(x)
+        loss = F.nll_loss(logits, y)
+        self.train_acc(logits, y)
+        Nf1, Sf1, Vf1, Ff1, Qf1 = self.train_f1(logits, y)
         self.log('train_acc', self.train_acc, on_step=True, on_epoch=False)
         self.log('train_S_f1', Sf1, on_step=True, on_epoch=False)
         self.log('train_V_f1', Vf1, on_step=True, on_epoch=False)
@@ -86,10 +88,12 @@ class MainECG(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx):
-        logits = self(batch['x'])
+        x = batch['x'].float().cuda()
+        y = batch['y'].long().cuda()
+        logits = self(x)
         # loss = F.nll_loss(logits, batch['y'])
-        self.valid_acc(logits, batch['y'])
-        Nf1, Sf1, Vf1, Ff1, Qf1 = self.valid_f1(logits, batch['y'])
+        self.valid_acc(logits, y)
+        Nf1, Sf1, Vf1, Ff1, Qf1 = self.valid_f1(logits, y)
         prefix = 'DS1_qdev' if dataloader_idx == 0 else 'DS2'
         self.log(f'{prefix}_acc', self.valid_acc, on_step=False, on_epoch=True)
         self.log(f'{prefix}_S_f1', Sf1, on_step=False, on_epoch=True)
