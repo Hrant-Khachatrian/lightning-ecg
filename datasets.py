@@ -4,18 +4,20 @@ from torch.utils.data import Dataset
 
 
 class MITBIHDataset(Dataset):
-    def __init__(self, npy_file, part, qdev=False):
+    def __init__(self, npy_file, part, qdev=None):
         """
         Args:
             npy_file (string): Path to the csv file with annotations.
             part (string): DS1 or DS2
-            qdev (boolean): Use the first 20% if True, the other 80% otherwise
+            qdev (boolean|None): Use the first 20% if True, the other 80% if False, all if None
         """
         self.raw_data = np.load(npy_file, allow_pickle=True).tolist()
         if part not in ['DS1', 'DS2']:
             raise Exception("Incorrect part {}".format(part))
 
         def inside_qdev(idx, length):
+            if qdev is None:
+                return True
             if qdev:
                 return idx < 0.2 * length
             else:

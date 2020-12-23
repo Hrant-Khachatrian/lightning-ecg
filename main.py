@@ -81,14 +81,15 @@ class MainECG(pl.LightningModule):
 
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx):
         logits = self(batch['x'])
         # loss = F.nll_loss(logits, batch['y'])
         self.valid_acc(logits, batch['y'])
         Nf1, Sf1, Vf1, Ff1, Qf1 = self.valid_f1(logits, batch['y'])
-        self.log('valid_acc', self.valid_acc, on_step=False, on_epoch=True)
-        self.log('valid_S_f1', Sf1, on_step=False, on_epoch=True)
-        self.log('valid_V_f1', Vf1, on_step=False, on_epoch=True)
+        prefix = 'DS1_qdev' if dataloader_idx == 0 else 'DS2'
+        self.log(f'{prefix}_acc', self.valid_acc, on_step=False, on_epoch=True)
+        self.log(f'{prefix}_S_f1', Sf1, on_step=False, on_epoch=True)
+        self.log(f'{prefix}_V_f1', Vf1, on_step=False, on_epoch=True)
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=1e-3)
@@ -107,19 +108,21 @@ class MainECG(pl.LightningModule):
         return train_loader
 
     def val_dataloader(self):
-        train_dataset = MITBIHDataset(self.data_path, 'DS2', qdev=False)
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size)
-        return train_loader
+        DS1_qdev = MITBIHDataset(self.data_path, 'DS1', qdev=True)
+        DS2 = MITBIHDataset(self.data_path, 'DS2', qdev=None)
+        loader1 = DataLoader(DS1_qdev, batch_size=self.batch_size)
+        loader2 = DataLoader(DS2, batch_size=self.batch_size)
+        return [loader1, loader2]
 
     def test_dataloader(self):
-        test_dataset = MITBIHDataset(self.data_path, 'DS2', qdev=False)
+        test_dataset = MITBIHDataset(self.data_path, 'DS2', qdev=None)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
         return test_loader
 
 from pytorch_lightning.loggers import TensorBoardLogger
 
 if __name__ == '__main__':
-    model = MainECG(batch_size=32).cuda()
+    model = MainECG(batch_size=64).cuda()
     logger = TensorBoardLogger('/home/hrant/tb_logs/', name='ecg180-custom-wrs')
     trainer = pl.Trainer(logger=logger)
     # trainer = pl.Trainer()
