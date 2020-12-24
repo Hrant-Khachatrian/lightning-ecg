@@ -156,18 +156,20 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--tb_path', '-tb', default='/nfs/c9_home/hrant/tb_logs/')
     parser.add_argument('--tb_name', '-n', default='ecg180-custom-wrs')
-    parser.add_argument('--batch_size', '-bs', type=int, default=64)
+    parser.add_argument('--batch_size', '-bs', type=int, default=512)
     parser.add_argument('--learning_rate', '-lr', type=float, default=0.001)
     parser.add_argument('--filters', '-f', type=int, default=16)
+    parser.add_argument('--accumulate_gradient', '-ag', type=int, default=8)
     args = parser.parse_args()
 
     model = MainECG(batch_size=args.batch_size,
                     conv_filters=args.filters,
                     learning_rate=args.learning_rate,
-                    data_workers=0).cuda()
+                    data_workers=4).cuda()
     logger = TensorBoardLogger(args.tb_path, name=args.tb_name)
 
     log_speed = max(1, 5000 // args.batch_size)
-    trainer = pl.Trainer(logger=logger, log_every_n_steps=log_speed, max_epochs=200)
+    trainer = pl.Trainer(logger=logger, log_every_n_steps=log_speed, max_epochs=200,
+                         accumulate_grad_batches=args.accumulate_gradient)
     # trainer = pl.Trainer()
     trainer.fit(model)
