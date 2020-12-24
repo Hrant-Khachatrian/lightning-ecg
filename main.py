@@ -52,9 +52,11 @@ class MainECG(pl.LightningModule):
         self.linear = nn.Linear(last_layer_neurons[cf], self.num_classes)
 
         self.train_acc = pl.metrics.Accuracy()
-        self.valid_acc = pl.metrics.Accuracy()
+        self.DS1_qdev_acc = pl.metrics.Accuracy()
+        self.DS2_acc = pl.metrics.Accuracy()
         self.train_f1 = pl.metrics.classification.F1(5, average=None)
-        self.valid_f1 = pl.metrics.classification.F1(5, average=None)
+        self.DS1_qdev_f1 = pl.metrics.classification.F1(5, average=None)
+        self.DS2_f1 = pl.metrics.classification.F1(5, average=None)
 
     def _create_downsampler(self, inplanes, planes, stride):
         return nn.Sequential(
@@ -99,11 +101,20 @@ class MainECG(pl.LightningModule):
         x = batch['x'].float().cuda()
         y = batch['y'].long().cuda()
         logits = self(x)
-        # loss = F.nll_loss(logits, batch['y'])
-        self.valid_acc(logits, y)
-        Nf1, Sf1, Vf1, Ff1, Qf1 = self.valid_f1(logits, y)
-        prefix = 'DS1_qdev' if dataloader_idx == 0 else 'DS2'
-        self.log(f'{prefix}_acc', self.valid_acc, on_step=False, on_epoch=True)
+        loss = F.nll_loss(logits, y)
+        if dataloader_idx == 0:
+            prefix = 'DS1_qdev'
+            acc = self.DS1_qdev_acc(logits, y)
+            Nf1, Sf1, Vf1, Ff1, Qf1 = self.DS1_qdev_f1(logits, y)
+        elif dataloader_idx == 1:
+            prefix = 'DS2'
+            acc = self.DS2_acc(logits, y)
+            Nf1, Sf1, Vf1, Ff1, Qf1 = self.DS2_f1(logits, y)
+        else:
+            raise Exception(f"Unknown dataloader_idx={dataloader_idx}")
+
+        self.log(f'{prefix}_loss', loss, on_step=False, on_epoch=True)
+        self.log(f'{prefix}_acc', acc, on_step=False, on_epoch=True)
         self.log(f'{prefix}_S_f1', Sf1, on_step=False, on_epoch=True)
         self.log(f'{prefix}_V_f1', Vf1, on_step=False, on_epoch=True)
 
@@ -153,7 +164,7 @@ if __name__ == '__main__':
     model = MainECG(batch_size=args.batch_size,
                     conv_filters=args.filters,
                     learning_rate=args.learning_rate,
-                    data_workers=4).cuda()
+                    data_workers=0).cuda()
     logger = TensorBoardLogger(args.tb_path, name=args.tb_name)
 
     log_speed = max(1, 5000 // args.batch_size)
