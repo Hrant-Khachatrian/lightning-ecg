@@ -17,13 +17,16 @@ from datasets import MITBIHDataset
 
 
 class MainECG(pl.LightningModule):
-    def __init__(self, batch_size=16, conv_filters=64, learning_rate=0.001,
+    def __init__(self, batch_size=16, conv_filters=64, learning_rate=0.001, lr_decay_milestones=None,
                  data_source='aligned180', data_workers=0):
         super().__init__()
 
+        if lr_decay_milestones is None:
+            lr_decay_milestones = []
         self.batch_size = batch_size
         self.data_workers = data_workers
         self.learning_rate = learning_rate
+        self.lr_decay_milestones = lr_decay_milestones
 
         if data_source == 'aligned180':
             self.data_path = '/nfs/c9_2tb/tigrann/domainbed/mit_bih_data.npy'  # aligned beats
@@ -122,7 +125,7 @@ class MainECG(pl.LightningModule):
         # optimizer = SGD(self.parameters(), lr=5e-3, momentum=0.9, weight_decay=0.001)
         # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[10, 30], gamma=0.1)
         optimizer = Adam(self.parameters(), lr=self.learning_rate)
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[50], gamma=0.1)
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=self.lr_decay_milestones, gamma=0.1)
         return [optimizer], [scheduler]
 
     def train_dataloader(self):
@@ -135,7 +138,8 @@ class MainECG(pl.LightningModule):
         weights = [class_weights[train_dataset.labels[i]] for i in range(num_samples)]
         sampler = WeightedRandomSampler(weights, num_samples)
 
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, sampler=sampler, num_workers=self.data_workers)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size,
+                                  sampler=sampler, num_workers=self.data_workers)
         return train_loader
 
     def val_dataloader(self):
@@ -165,11 +169,12 @@ if __name__ == '__main__':
     model = MainECG(batch_size=args.batch_size,
                     conv_filters=args.filters,
                     learning_rate=args.learning_rate,
+                    lr_decay_milestones=[50 * args.accumulate_gradient],
                     data_workers=4).cuda()
     logger = TensorBoardLogger(args.tb_path, name=args.tb_name)
 
     log_speed = max(1, 5000 // args.batch_size)
-    trainer = pl.Trainer(logger=logger, log_every_n_steps=log_speed, max_epochs=200,
+    trainer = pl.Trainer(logger=logger, log_every_n_steps=log_speed, max_epochs=200 * args.accumulate_gradient,
                          accumulate_grad_batches=args.accumulate_gradient)
     # trainer = pl.Trainer()
     trainer.fit(model)
