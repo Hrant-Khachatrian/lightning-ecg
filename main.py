@@ -152,6 +152,7 @@ class MainECG(pl.LightningModule):
 
         num_samples = len(train_dataset)
         class_counts = [(train_dataset.labels == i).sum() for i in range(self.num_classes)]
+        class_counts[-1] = 1e7
 
         class_weights = [num_samples / class_counts[i] for i in range(self.num_classes)]
         weights = [class_weights[train_dataset.labels[i]] for i in range(num_samples)]
