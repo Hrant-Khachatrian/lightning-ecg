@@ -18,8 +18,11 @@ from datasets import MITBIHDataset
 
 class MainECG(pl.LightningModule):
     def __init__(self, batch_size=16, conv_filters=(32, 64, 256, 64, 32), learning_rate=0.001, lr_decay_milestones=None,
-                 data_source='aligned180', data_workers=0):
+                 data_source='aligned180', data_workers=0, depth_multiplier = 1):
         super().__init__()
+
+        if depth_multiplier not in [1, 2]:
+            raise Exception(f"Depth multiplier {depth_multiplier} is not implemented")
 
         if lr_decay_milestones is None:
             lr_decay_milestones = []
@@ -27,6 +30,7 @@ class MainECG(pl.LightningModule):
         self.data_workers = data_workers
         self.learning_rate = learning_rate
         self.lr_decay_milestones = lr_decay_milestones
+        self.depth_multiplier = depth_multiplier
 
         if data_source == 'aligned180':
             self.data_path = '/nfs/c9_2tb/tigrann/domainbed/mit_bih_data.npy'  # aligned beats
@@ -42,15 +46,20 @@ class MainECG(pl.LightningModule):
         c1, c2, c3, c4, c5 = conv_filters
 
         self.conv1 = nn.Conv1d(1, c1, 5, stride=2).cuda()
-        self.conv1s = nn.Conv1d(c1, c1, 5, stride=1, padding=2).cuda()
+        if self.depth_multiplier == 2:
+            self.conv1s = nn.Conv1d(c1, c1, 5, stride=1, padding=2).cuda()
         self.conv2 = nn.Conv1d(c1, c2, 5, stride=2).cuda()
-        self.conv2s = nn.Conv1d(c2, c2, 5, stride=1, padding=2).cuda()
+        if self.depth_multiplier == 2:
+            self.conv2s = nn.Conv1d(c2, c2, 5, stride=1, padding=2).cuda()
         self.conv3 = nn.Conv1d(c2, c3, 5, stride=2).cuda()
-        self.conv3s = nn.Conv1d(c3, c3, 5, stride=1, padding=2).cuda()
+        if self.depth_multiplier == 2:
+            self.conv3s = nn.Conv1d(c3, c3, 5, stride=1, padding=2).cuda()
         self.conv4 = nn.Conv1d(c3, c4, 5, stride=2).cuda()
-        self.conv4s = nn.Conv1d(c4, c4, 5, stride=1, padding=2).cuda()
+        if self.depth_multiplier == 2:
+            self.conv4s = nn.Conv1d(c4, c4, 5, stride=1, padding=2).cuda()
         self.conv5 = nn.Conv1d(c4, c5, 5, stride=2).cuda()
-        self.conv5s = nn.Conv1d(c5, c5, 5, stride=1, padding=2).cuda()
+        if self.depth_multiplier == 2:
+            self.conv5s = nn.Conv1d(c5, c5, 5, stride=1, padding=2).cuda()
 
         self.linear = nn.Linear(c5 * 2, self.num_classes)
 
@@ -74,15 +83,20 @@ class MainECG(pl.LightningModule):
         # x = x.repeat(1, 1, 11, 1)   # (b, 1, 11, 180)
 
         x = self.conv1(x)  # (b, 32, 88)  64=conv_filters
-        x = self.conv1s(x)  # (b, 32, 88)  64=conv_filters
+        if self.depth_multiplier == 2:
+            x = self.conv1s(x)  # (b, 32, 88)  64=conv_filters
         x = self.conv2(x)  # (b, 64, 42)
-        x = self.conv2s(x)  # (b, 64, 42)
+        if self.depth_multiplier == 2:
+            x = self.conv2s(x)  # (b, 64, 42)
         x = self.conv3(x)  # (b, 256, 19)
-        x = self.conv3s(x)  # (b, 256, 19)
+        if self.depth_multiplier == 2:
+            x = self.conv3s(x)  # (b, 256, 19)
         x = self.conv4(x)  # (b, 64, 8)
-        x = self.conv4s(x)  # (b, 64, 8)
+        if self.depth_multiplier == 2:
+            x = self.conv4s(x)  # (b, 64, 8)
         x = self.conv5(x)  # (b, 32, 2)
-        x = self.conv5s(x)  # (b, 32, 2)
+        if self.depth_multiplier == 2:
+            x = self.conv5s(x)  # (b, 32, 2)
 
         x = x.view(batch_size, -1)  # (b, 64)
         x = self.linear(x)
@@ -180,6 +194,6 @@ if __name__ == '__main__':
 
     log_speed = max(1, 5000 // args.batch_size)
     trainer = pl.Trainer(logger=logger, log_every_n_steps=log_speed, max_epochs=500 * args.accumulate_gradient,
-                         accumulate_grad_batches=args.accumulate_gradient)
+                         accumulate_grad_batches=args.accumulate_gradient, log_gpu_memory='all', track_grad_norm=2)
     # trainer = pl.Trainer()
     trainer.fit(model)
