@@ -167,11 +167,11 @@ if __name__ == '__main__':
                     # conv_filters=args.filters,
                     learning_rate=args.learning_rate,
                     lr_decay_milestones=[50 * args.accumulate_gradient],
-                    data_workers=0).cuda()
+                    data_workers=4).cuda()
     logger = TensorBoardLogger(args.tb_path, name=args.tb_name)
 
     log_speed = max(1, 5000 // args.batch_size)
-    trainer = pl.Trainer(logger=logger, log_every_n_steps=log_speed, max_epochs=200 * args.accumulate_gradient,
+    trainer = pl.Trainer(logger=logger, log_every_n_steps=log_speed, max_epochs=500 * args.accumulate_gradient,
                          accumulate_grad_batches=args.accumulate_gradient)
     # trainer = pl.Trainer()
     trainer.fit(model)
