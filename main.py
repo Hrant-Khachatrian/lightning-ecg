@@ -17,7 +17,7 @@ from datasets import MITBIHDataset
 
 
 class MainECG(pl.LightningModule):
-    def __init__(self, batch_size=16, conv_filters=64, learning_rate=0.001, lr_decay_milestones=None,
+    def __init__(self, batch_size=16, conv_filters=(32, 64, 256, 64, 32), learning_rate=0.001, lr_decay_milestones=None,
                  data_source='aligned180', data_workers=0):
         super().__init__()
 
@@ -41,18 +41,15 @@ class MainECG(pl.LightningModule):
 
         cf = conv_filters
 
-        self.block1 = BasicBlock(1, cf)
-        self.block2 = BasicBlock(cf, cf, stride=2, downsample=self._create_downsampler(cf, cf, 2))
-        self.block3 = BasicBlock(cf, cf, stride=2, downsample=self._create_downsampler(cf, cf, 2))
-        self.block4 = BasicBlock(cf, cf, stride=2, downsample=self._create_downsampler(cf, cf, 2))
-        self.block5 = BasicBlock(cf, cf, stride=2, downsample=self._create_downsampler(cf, cf, 2))
+        self.convs = []
+        last_filter_size = 1
+        for filter_size in conv_filters:
+            self.convs.append(
+                nn.Conv1d(last_filter_size, filter_size, 5, stride=2).cuda()
+            )
+            last_filter_size = filter_size
 
-        last_layer_neurons = {
-            64: 768,
-            32: 384,
-            16: 192
-        }
-        self.linear = nn.Linear(last_layer_neurons[cf], self.num_classes)
+        self.linear = nn.Linear(64, self.num_classes)
 
         self.train_acc = pl.metrics.Accuracy()
         self.DS1_qdev_acc = pl.metrics.Accuracy()
@@ -70,16 +67,16 @@ class MainECG(pl.LightningModule):
     def forward(self, x):
         batch_size, beat_length = x.size()
 
-        x = x.view(batch_size, 1, 1, beat_length)
-        x = x.repeat(1, 1, 11, 1)   # (b, 1, 11, 180)
+        x = x.view(batch_size, 1, beat_length) # (b, 1, 180)
+        # x = x.repeat(1, 1, 11, 1)   # (b, 1, 11, 180)
 
-        x = self.block1(x)  # (b, 64, 11, 180)  64=conv_filters
-        x = self.block2(x)  # (b, 64, 6, 90)
-        x = self.block3(x)  # (b, 64, 3, 45)
-        x = self.block4(x)  # (b, 64, 2, 23)
-        x = self.block5(x)  # (b, 64, 1, 12)
+        x = self.convs[0](x)  # (b, 32, 88)  64=conv_filters
+        x = self.convs[1](x)  # (b, 64, 42)
+        x = self.convs[2](x)  # (b, 256, 19)
+        x = self.convs[3](x)  # (b, 64, 8)
+        x = self.convs[4](x)  # (b, 32, 2)
 
-        x = x.view(batch_size, -1)  # (b, 768)
+        x = x.view(batch_size, -1)  # (b, 64)
         x = self.linear(x)
 
         x = F.log_softmax(x, dim=1)
@@ -160,17 +157,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--tb_path', '-tb', default='/nfs/c9_home/hrant/tb_logs/')
     parser.add_argument('--tb_name', '-n', default='ecg180-custom-wrs')
-    parser.add_argument('--batch_size', '-bs', type=int, default=512)
+    parser.add_argument('--batch_size', '-bs', type=int, default=12)
     parser.add_argument('--learning_rate', '-lr', type=float, default=0.001)
     parser.add_argument('--filters', '-f', type=int, default=16)
     parser.add_argument('--accumulate_gradient', '-ag', type=int, default=1)
     args = parser.parse_args()
 
     model = MainECG(batch_size=args.batch_size,
-                    conv_filters=args.filters,
+                    # conv_filters=args.filters,
                     learning_rate=args.learning_rate,
                     lr_decay_milestones=[50 * args.accumulate_gradient],
-                    data_workers=4).cuda()
+                    data_workers=0).cuda()
     logger = TensorBoardLogger(args.tb_path, name=args.tb_name)
 
     log_speed = max(1, 5000 // args.batch_size)
