@@ -184,6 +184,7 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', '-lr', type=float, default=0.001)
     parser.add_argument('--filters', '-f', type=int, default=1)
     parser.add_argument('--accumulate_gradient', '-ag', type=int, default=1)
+    parser.add_argument('--gradient_clip', '-gc', type=float, default=0)
     args = parser.parse_args()
 
     model = MainECG(batch_size=args.batch_size,
@@ -195,6 +196,7 @@ if __name__ == '__main__':
 
     log_speed = max(1, 5000 // args.batch_size)
     trainer = pl.Trainer(logger=logger, log_every_n_steps=log_speed, max_epochs=5000 * args.accumulate_gradient,
-                         accumulate_grad_batches=args.accumulate_gradient, log_gpu_memory='all', track_grad_norm=2)
+                         accumulate_grad_batches=args.accumulate_gradient, log_gpu_memory='all', track_grad_norm=2,
+                         gradient_clip_val=args.gradient_clip)
     # trainer = pl.Trainer()
     trainer.fit(model)
