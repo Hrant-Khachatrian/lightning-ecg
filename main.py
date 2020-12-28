@@ -163,7 +163,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', '-bs', type=int, default=512)
     parser.add_argument('--learning_rate', '-lr', type=float, default=0.001)
     parser.add_argument('--filters', '-f', type=int, default=16)
-    parser.add_argument('--accumulate_gradient', '-ag', type=int, default=8)
+    parser.add_argument('--accumulate_gradient', '-ag', type=int, default=1)
     args = parser.parse_args()
 
     model = MainECG(batch_size=args.batch_size,
