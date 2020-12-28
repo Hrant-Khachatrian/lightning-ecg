@@ -47,7 +47,7 @@ class MainECG(pl.LightningModule):
         self.conv4 = nn.Conv1d(c3, c4, 5, stride=2).cuda()
         self.conv5 = nn.Conv1d(c4, c5, 5, stride=2).cuda()
 
-        self.linear = nn.Linear(64, self.num_classes)
+        self.linear = nn.Linear(c5 * 2, self.num_classes)
 
         self.train_acc = pl.metrics.Accuracy()
         self.DS1_qdev_acc = pl.metrics.Accuracy()
@@ -157,12 +157,12 @@ if __name__ == '__main__':
     parser.add_argument('--tb_name', '-n', default='ecg180-custom-wrs')
     parser.add_argument('--batch_size', '-bs', type=int, default=12)
     parser.add_argument('--learning_rate', '-lr', type=float, default=0.001)
-    parser.add_argument('--filters', '-f', type=int, default=16)
+    parser.add_argument('--filters', '-f', type=int, default=1)
     parser.add_argument('--accumulate_gradient', '-ag', type=int, default=1)
     args = parser.parse_args()
 
     model = MainECG(batch_size=args.batch_size,
-                    # conv_filters=args.filters,
+                    conv_filters=np.array((32, 64, 256, 64, 32)) * args.filters,
                     learning_rate=args.learning_rate,
                     lr_decay_milestones=[50000 * args.accumulate_gradient],
                     data_workers=4).cuda()
