@@ -39,15 +39,13 @@ class MainECG(pl.LightningModule):
 
         self.num_classes = len(class_weights)
 
-        cf = conv_filters
+        c1, c2, c3, c4, c5 = conv_filters
 
-        self.convs = []
-        last_filter_size = 1
-        for filter_size in conv_filters:
-            self.convs.append(
-                nn.Conv1d(last_filter_size, filter_size, 5, stride=2).cuda()
-            )
-            last_filter_size = filter_size
+        self.conv1 = nn.Conv1d(1, c1, 5, stride=2).cuda()
+        self.conv2 = nn.Conv1d(c1, c2, 5, stride=2).cuda()
+        self.conv3 = nn.Conv1d(c2, c3, 5, stride=2).cuda()
+        self.conv4 = nn.Conv1d(c3, c4, 5, stride=2).cuda()
+        self.conv5 = nn.Conv1d(c4, c5, 5, stride=2).cuda()
 
         self.linear = nn.Linear(64, self.num_classes)
 
@@ -70,11 +68,11 @@ class MainECG(pl.LightningModule):
         x = x.view(batch_size, 1, beat_length) # (b, 1, 180)
         # x = x.repeat(1, 1, 11, 1)   # (b, 1, 11, 180)
 
-        x = self.convs[0](x)  # (b, 32, 88)  64=conv_filters
-        x = self.convs[1](x)  # (b, 64, 42)
-        x = self.convs[2](x)  # (b, 256, 19)
-        x = self.convs[3](x)  # (b, 64, 8)
-        x = self.convs[4](x)  # (b, 32, 2)
+        x = self.conv1(x)  # (b, 32, 88)  64=conv_filters
+        x = self.conv2(x)  # (b, 64, 42)
+        x = self.conv3(x)  # (b, 256, 19)
+        x = self.conv4(x)  # (b, 64, 8)
+        x = self.conv5(x)  # (b, 32, 2)
 
         x = x.view(batch_size, -1)  # (b, 64)
         x = self.linear(x)
