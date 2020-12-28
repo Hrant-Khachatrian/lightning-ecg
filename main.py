@@ -194,7 +194,7 @@ if __name__ == '__main__':
     logger = TensorBoardLogger(args.tb_path, name=args.tb_name)
 
     log_speed = max(1, 5000 // args.batch_size)
-    trainer = pl.Trainer(logger=logger, log_every_n_steps=log_speed, max_epochs=500 * args.accumulate_gradient,
+    trainer = pl.Trainer(logger=logger, log_every_n_steps=log_speed, max_epochs=5000 * args.accumulate_gradient,
                          accumulate_grad_batches=args.accumulate_gradient, log_gpu_memory='all', track_grad_norm=2)
     # trainer = pl.Trainer()
     trainer.fit(model)
