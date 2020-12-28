@@ -166,7 +166,7 @@ if __name__ == '__main__':
     model = MainECG(batch_size=args.batch_size,
                     # conv_filters=args.filters,
                     learning_rate=args.learning_rate,
-                    lr_decay_milestones=[50 * args.accumulate_gradient],
+                    lr_decay_milestones=[50000 * args.accumulate_gradient],
                     data_workers=4).cuda()
     logger = TensorBoardLogger(args.tb_path, name=args.tb_name)
 
