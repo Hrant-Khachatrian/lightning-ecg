@@ -66,9 +66,10 @@ class MainECG(pl.LightningModule):
         self.train_acc = pl.metrics.Accuracy()
         self.DS1_qdev_acc = pl.metrics.Accuracy()
         self.DS2_acc = pl.metrics.Accuracy()
-        self.train_f1 = pl.metrics.classification.F1(5, average=None)
-        self.DS1_qdev_f1 = pl.metrics.classification.F1(5, average=None)
-        self.DS2_f1 = pl.metrics.classification.F1(5, average=None)
+        self.train_f1 = pl.metrics.classification.F1(4, average=None)
+        self.train_cm = pl.metrics.classification.ConfusionMatrix(4)
+        self.DS1_qdev_cm = pl.metrics.classification.ConfusionMatrix(4)
+        self.DS2_cm = pl.metrics.classification.ConfusionMatrix(4)
 
     def _create_downsampler(self, inplanes, planes, stride):
         return nn.Sequential(
@@ -110,10 +111,14 @@ class MainECG(pl.LightningModule):
         logits = self(x)
         loss = F.nll_loss(logits, y)
         self.train_acc(logits, y)
-        Nf1, Sf1, Vf1, Ff1, Qf1 = self.train_f1(logits, y)
+
+        Nf1, Sf1, Vf1, Ff1 = self.train_f1(logits, y)
+        cm = self.train_cm(logits, y)
+        Vf1_cm = self._calc_f1(cm)
         self.log('train_acc', self.train_acc, on_step=True, on_epoch=False)
         self.log('train_S_f1', Sf1, on_step=True, on_epoch=False)
         self.log('train_V_f1', Vf1, on_step=True, on_epoch=False)
+        self.log('train_V_f1_cm', Vf1_cm, on_step=True, on_epoch=False)
         self.log('loss', loss, on_step=True, on_epoch=False)
         self.log('lr', self.optimizers().param_groups[0]['lr'], on_step=False, on_epoch=True)
 
@@ -127,18 +132,38 @@ class MainECG(pl.LightningModule):
         if dataloader_idx == 0:
             prefix = 'DS1_qdev'
             acc = self.DS1_qdev_acc(logits, y)
-            Nf1, Sf1, Vf1, Ff1, Qf1 = self.DS1_qdev_f1(logits, y)
+            cm = self.DS1_qdev_cm(logits, y)
         elif dataloader_idx == 1:
             prefix = 'DS2'
             acc = self.DS2_acc(logits, y)
-            Nf1, Sf1, Vf1, Ff1, Qf1 = self.DS2_f1(logits, y)
+            cm = self.DS2_cm(logits, y)
         else:
             raise Exception(f"Unknown dataloader_idx={dataloader_idx}")
 
         self.log(f'{prefix}_loss', loss, on_step=False, on_epoch=True)
         self.log(f'{prefix}_acc', acc, on_step=False, on_epoch=True)
-        self.log(f'{prefix}_S_f1', Sf1, on_step=False, on_epoch=True)
-        self.log(f'{prefix}_V_f1', Vf1, on_step=False, on_epoch=True)
+        return cm
+
+    @classmethod
+    def _calc_f1(cls, cm, index):
+        f1_TP = cm[index, index]
+        f1_FPTP = cm[:, index].sum()  # - Vf1_TP
+        f1_FNTP = cm[index, :].sum()  # - Vf1_TP
+        f1_cm = 2 / (f1_FPTP / f1_TP + f1_FNTP / f1_TP)
+        return f1_cm
+
+    def validation_epoch_end(self, outputs):
+        outputs_DS1qdev, outputs_DS2 = outputs
+
+        outputs_DS1qdev = np.array(outputs_DS1qdev)
+        cm = outputs_DS1qdev.sum(axis=0)
+        self.log('DS1_qdev_VF1', self._calc_f1(cm, 2))
+        self.log('DS1_qdev_SF1', self._calc_f1(cm, 1))
+
+        outputs_DS2 = np.array(outputs_DS2)
+        cm = outputs_DS2.sum(axis=0)
+        self.log('DS2_VF1', self._calc_f1(cm, 2))
+        self.log('DS2_SF1', self._calc_f1(cm, 1))
 
     def configure_optimizers(self):
         # optimizer = SGD(self.parameters(), lr=5e-3, momentum=0.9, weight_decay=0.001)
@@ -191,7 +216,7 @@ if __name__ == '__main__':
                     conv_filters=np.array((32, 64, 256, 64, 32)) * args.filters,
                     learning_rate=args.learning_rate,
                     lr_decay_milestones=[50000 * args.accumulate_gradient],
-                    data_workers=4).cuda()
+                    data_workers=0).cuda()
     logger = TensorBoardLogger(args.tb_path, name=args.tb_name)
 
     log_speed = max(1, 5000 // args.batch_size)
