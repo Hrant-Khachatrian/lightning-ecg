@@ -114,11 +114,11 @@ class MainECG(pl.LightningModule):
 
         Nf1, Sf1, Vf1, Ff1 = self.train_f1(logits, y)
         cm = self.train_cm(logits, y)
-        Vf1_cm = self._calc_f1(cm)
+        Vf1_cm = self._calc_f1(cm, 2)
         self.log('train_acc', self.train_acc, on_step=True, on_epoch=False)
         self.log('train_S_f1', Sf1, on_step=True, on_epoch=False)
         self.log('train_V_f1', Vf1, on_step=True, on_epoch=False)
-        self.log('train_V_f1_cm', Vf1_cm, on_step=True, on_epoch=False)
+        self.log('train_Vf1', Vf1_cm, on_step=True, on_epoch=False)
         self.log('loss', loss, on_step=True, on_epoch=False)
         self.log('lr', self.optimizers().param_groups[0]['lr'], on_step=False, on_epoch=True)
 
